@@ -1,8 +1,8 @@
 mod trade;
 mod vwap;
+mod trade_providers;
 
 use trade::{TradePair, TradeProvider};
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

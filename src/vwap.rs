@@ -63,12 +63,5 @@ impl VWAP {
                 }
             },
         }
-
-        // let mut vwap_result = VWAPResult::new(TradePair::new("BTC".to_string(), "USDT".to_string()));
-
-        // loop {
-        //     let trade = self.trade_chan.recv().await.unwrap();
-
-        // }
     }
 }
