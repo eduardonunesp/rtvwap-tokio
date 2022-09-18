@@ -1,18 +1,18 @@
 use num_bigint::BigInt;
-use tokio::{sync::mpsc, select};
+use tokio::{select, sync::mpsc};
 
-use crate::trade::{TradePair, Trade};
+use crate::trade::{Trade, TradePair};
 
 pub struct VWAPResult {
     pub pair: TradePair,
-    pub vwap_value: BigInt,
+    pub vwap_value: f64,
 }
 
 impl VWAPResult {
     pub fn new(pair: TradePair) -> VWAPResult {
         VWAPResult {
             pair,
-            vwap_value: BigInt::from(0),
+            vwap_value: f64::from(0),
         }
     }
 }
@@ -37,22 +37,22 @@ impl VWAP {
                     Some(trade) => {
                         self.trade_samples.push(trade);
 
-                        let mut sum_price_and_volume = BigInt::from(0);
+                        let mut sum_price_and_volume: f64 = 0.;
 
                         for trade in self.trade_samples.iter() {
-                            let price_and_volume = trade.price.clone() * trade.quantity.clone();
-                            sum_price_and_volume = sum_price_and_volume.clone() + price_and_volume.clone();
+                            let price_and_volume = trade.price * trade.quantity;
+                            sum_price_and_volume = sum_price_and_volume + price_and_volume;
                         }
 
-                        let mut sum_volume = BigInt::from(0);
+                        let mut sum_volume: f64 = 0.;
 
                         for trade in self.trade_samples.iter() {
-                            sum_volume = sum_volume.clone() + trade.quantity.clone();
+                            sum_volume = sum_volume + trade.quantity;
                         }
 
                         let result = VWAPResult{
                             pair: TradePair::new("BTC".to_string(), "USDT".to_string()),
-                            vwap_value: sum_price_and_volume.clone() + sum_volume.clone(),
+                            vwap_value: sum_price_and_volume + sum_volume,
                         };
 
                         vwapResult.send(result).await;

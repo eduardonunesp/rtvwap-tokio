@@ -1,6 +1,8 @@
+#![allow(warnings)]
+
 mod trade;
-mod vwap;
 mod trade_providers;
+mod vwap;
 
 use trade::{TradePair, TradeProvider};
 
@@ -11,9 +13,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // println!("{:?}", trade);
     // let mut vwap_result_chan = mpsc::channel
 
-    let trade_feed_pairs = vec![
-        (TradePair::new("BTC".to_string(), "USDT".to_string()), TradeProvider::new()),
-    ];
+    let trade_feed_pairs = vec![(
+        TradePair::new("BTC".to_string(), "USDT".to_string()),
+        TradeProvider::new(),
+    )];
 
     for (pair, provider) in trade_feed_pairs {
         println!("{:#?}", pair);
