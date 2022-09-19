@@ -19,17 +19,15 @@ impl TradePair {
 
 #[derive(Debug, Clone)]
 pub struct Trade {
-    pub pairPair: TradePair,
+    pub trade_pair: TradePair,
     pub price: f64,
     pub quantity: f64,
 }
 
 impl Trade {
-    pub fn new(pairPair: TradePair, price: f64, quantity: f64) -> Trade {
-        let (tx, mut rx) = mpsc::channel::<i32>(32);
-
+    pub fn new(trade_pair: TradePair, price: f64, quantity: f64) -> Trade {
         Trade {
-            pairPair,
+            trade_pair,
             price,
             quantity,
         }
@@ -52,31 +50,31 @@ impl TradeProvider {
 
 #[async_trait]
 pub trait TradeProviderCreator {
-    async fn createTradeProvider(
+    async fn create_trade_provider(
         &self,
         pair: TradePair,
     ) -> Result<TradeProvider, Box<dyn std::error::Error>>;
 }
 
 pub struct TradeFeed {
-    pub tradeProviderChan: TradeProvider,
+    pub trade_provider_chan: TradeProvider,
 }
 
-pub async fn newTradeFeed(
+pub async fn new_trade_feed(
     left: String,
     right: String,
-    tradeProvider: Box<dyn TradeProviderCreator>,
+    trade_provider: Box<dyn TradeProviderCreator>,
 ) -> Result<TradeFeed, Box<dyn std::error::Error>> {
-    return newTradeFeedWithPair(TradePair { left, right }, tradeProvider).await;
+    return new_trade_feed_with_pair(TradePair { left, right }, trade_provider).await;
 }
 
-pub async fn newTradeFeedWithPair(
+pub async fn new_trade_feed_with_pair(
     pair: TradePair,
-    tradeProvider: Box<dyn TradeProviderCreator>,
+    trade_provider: Box<dyn TradeProviderCreator>,
 ) -> Result<TradeFeed, Box<dyn std::error::Error>> {
-    let tradeFeed = TradeFeed {
-        tradeProviderChan: tradeProvider.createTradeProvider(pair).await?,
+    let trade_feed = TradeFeed {
+        trade_provider_chan: trade_provider.create_trade_provider(pair).await?,
     };
 
-    Ok(tradeFeed)
+    Ok(trade_feed)
 }

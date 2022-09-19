@@ -1,19 +1,23 @@
-use std::{str::FromStr, time::Duration};
-
 use async_trait::async_trait;
-use futures_util::{SinkExt, StreamExt, TryStreamExt};
-use num_bigint::{BigInt, ToBigInt};
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use tokio::{select, sync::mpsc, time::sleep};
 use tokio_tungstenite::{
-    connect_async, connect_async_tls_with_config,
-    tungstenite::{Error, Message, Result},
+    connect_async,
+    tungstenite::{Message, Result},
 };
 use url::Url;
 
 use crate::trade::{Trade, TradePair, TradeProvider, TradeProviderCreator};
 
+const WS_URL: &str = "wss://ws-feed.exchange.coinbase.com";
+
 pub struct CoinbaseProvider {}
+
+impl CoinbaseProvider {
+    pub fn new() -> CoinbaseProvider {
+        CoinbaseProvider {}
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 struct SubReq {
@@ -40,14 +44,13 @@ struct MatchRes {
 
 #[async_trait]
 impl TradeProviderCreator for CoinbaseProvider {
-    async fn createTradeProvider(
+    async fn create_trade_provider(
         &self,
         pair: TradePair,
     ) -> Result<TradeProvider, Box<dyn std::error::Error>> {
         let trade_provider = TradeProvider::new();
 
-        let url = Url::parse("wss://ws-feed.exchange.coinbase.com")
-            .expect("Can't connect to case count URL");
+        let url = Url::parse(WS_URL)?;
 
         let (mut ws_stream, _) = connect_async(url).await?;
 
@@ -57,13 +60,13 @@ impl TradeProviderCreator for CoinbaseProvider {
             channels: vec!["matches".to_string()],
         };
 
-        let sub_req = serde_json::to_string(&sub_req)?;
-
-        ws_stream.send(Message::Text(sub_req)).await?;
+        ws_stream
+            .send(Message::Text(serde_json::to_string(&sub_req)?))
+            .await?;
 
         ws_stream.next().await;
 
-        let tx = trade_provider.tx.clone();
+        let tp_tx = trade_provider.tx.clone();
 
         tokio::spawn(async move {
             while let Some(msg) = ws_stream.next().await {
@@ -75,7 +78,8 @@ impl TradeProviderCreator for CoinbaseProvider {
                     msg.price.parse().unwrap(),
                     msg.size.parse().unwrap(),
                 );
-                tx.send(trade.clone()).await;
+
+                tp_tx.send(trade.clone()).await.unwrap();
             }
         });
 
@@ -86,24 +90,28 @@ impl TradeProviderCreator for CoinbaseProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{sync::Arc, sync::Mutex, time::Duration};
+    use tokio::time::sleep;
 
     #[tokio::test]
     async fn test_coinbase_provider() {
         let coinbase_provider = CoinbaseProvider {};
         let trade_pair = TradePair::new("BTC".to_string(), "USD".to_string());
         let mut trade_provider = coinbase_provider
-            .createTradeProvider(trade_pair)
+            .create_trade_provider(trade_pair)
             .await
             .unwrap();
 
-        println!("Trade provider created");
+        let count = Arc::new(Mutex::from(0));
+
+        let c = Arc::clone(&count);
 
         tokio::spawn(async move {
             loop {
-                println!("Waiting for trade");
                 tokio::select! {
-                    trade = trade_provider.rx.recv() => {
-                        println!("{:?}", trade.unwrap());
+                    _ = trade_provider.rx.recv() => {
+                        let mut v = c.lock().unwrap();
+                        *v += 1;
                     }
                     _ = sleep(Duration::from_secs(1)) => {
                         continue
@@ -112,7 +120,7 @@ mod tests {
             }
         });
 
-        sleep(Duration::from_secs(10)).await;
-        // println!("{:#?}", trade_provider);
+        sleep(Duration::from_secs(3)).await;
+        assert!(*count.lock().unwrap() > 0);
     }
 }
