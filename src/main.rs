@@ -1,47 +1,50 @@
-#![allow(warnings)]
-
 mod trade;
+mod trade_feed;
+mod trade_pair;
+mod trade_provider;
 mod trade_providers;
 mod vwap;
 
-use std::{
-    borrow::BorrowMut,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
-
-use tokio::{sync::mpsc, time::sleep};
-use trade::{new_trade_feed_with_pair, TradePair, TradeProvider};
+use tokio::sync::mpsc;
+use trade_pair::{Currency, TradePair};
 use trade_providers::coinbase::CoinbaseProvider;
 use vwap::{VWAPResult, VWAP};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (tx, mut rx) = mpsc::channel::<VWAPResult>(100);
+fn create_vwap_result_chan(
+    buffer_size: usize,
+) -> (mpsc::Sender<VWAPResult>, mpsc::Receiver<VWAPResult>) {
+    mpsc::channel(buffer_size)
+}
 
-    let trade_feed_pairs = vec![(
-        TradePair::new("BTC".to_string(), "USDT".to_string()),
-        Box::new(CoinbaseProvider::new()),
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let (tx, mut rx) = create_vwap_result_chan(32);
+
+    let trade_groups = vec![(
+        TradePair::new(Currency::BTC, Currency::USD),
+        CoinbaseProvider::new(),
     )];
 
-    let mut vwaps: Arc<Mutex<Vec<VWAP>>> = Arc::new(Mutex::new(Vec::new()));
-
-    for (pair, provider) in trade_feed_pairs {
-        let trade_feeder = new_trade_feed_with_pair(pair, provider).await?;
+    for (pair, provider) in trade_groups {
+        let trade_feeder = trade_feed::new_trade_feed(pair, provider).await?;
         let tx = tx.clone();
-        let v = vwaps.clone();
+
+        // Run calculation in a separate task
         tokio::spawn(async move {
-            let mut vwap = VWAP::new(trade_feeder.trade_provider_chan.rx);
+            let mut vwap = VWAP::new(trade_feeder.trade_provider.rx);
             vwap.calculate(tx).await;
-            v.lock().unwrap().push(vwap);
         });
     }
 
-    loop {
+    // Run the main loop 100 times
+    for _ in 0..100 {
         tokio::select! {
             vwap_result = rx.recv() => {
                 if let Some(vwap_result) = vwap_result {
-                    println!("VWAP: {}", vwap_result.vwap_value);
+                    let to: &str = vwap_result.pair.to.into();
+                    let from: &str = vwap_result.pair.from.into();
+                    // Precise value to .2
+                    println!("VWAP: from {} to {} value {:.2}", from, to, vwap_result.vwap_value);
                 }
             }
         }

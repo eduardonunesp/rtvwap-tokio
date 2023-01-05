@@ -2,9 +2,11 @@ use std::time::Duration;
 
 use tokio::{select, sync::mpsc, time::sleep};
 
-use crate::trade::{Trade, TradePair};
-#[derive(Debug)]
+use crate::{trade::Trade, trade_pair::TradePair};
 
+const QUEUE_BUFFER_SIZE: usize = 200;
+
+#[derive(Debug)]
 pub struct VWAPResult {
     pub pair: TradePair,
     pub vwap_value: f64,
@@ -37,29 +39,29 @@ impl VWAP {
                         Some(trade) => {
                             self.trade_samples.push(trade.clone());
 
-                            if self.trade_samples.len() > 100 {
+                            if self.trade_samples.len() > QUEUE_BUFFER_SIZE {
                                 self.trade_samples.remove(0);
                             }
 
                             let mut sum_price_and_volume: f64 = 0.;
 
-                            for trade in self.trade_samples.iter() {
-                                let price_and_volume = trade.price * trade.quantity;
+                            for t in self.trade_samples.iter() {
+                                let price_and_volume = t.price * t.quantity;
                                 sum_price_and_volume = sum_price_and_volume + price_and_volume;
                             }
 
                             let mut sum_volume: f64 = 0.;
 
-                            for trade in self.trade_samples.iter() {
-                                sum_volume = sum_volume + trade.quantity;
+                            for t in self.trade_samples.iter() {
+                                sum_volume = sum_volume + t.quantity;
                             }
 
                             let result = VWAPResult::new(
-                                TradePair::new(trade.trade_pair.left, trade.trade_pair.right),
-                                sum_price_and_volume + sum_volume,
+                                trade.trade_pair,
+                                sum_price_and_volume / sum_volume,
                             );
 
-                            vwap_result.send(result).await.unwrap();;
+                            vwap_result.send(result).await.unwrap();
                         },
                         None => {
                             println!("Trade channel closed");
